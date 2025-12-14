@@ -1,242 +1,131 @@
-# VS Code MCP Server
+# VS Code MCP Server (Async Fork)
 
-A Visual Studio Code extension (available on the [Marketplace](https://marketplace.visualstudio.com/items?itemName=JuehangQin.vscode-mcp-server)) that allows Claude and other MCP clients to code directly in VS Code! Inspired by [Serena](https://github.com/oraios/serena), but using VS Code's built-in capabilities. Perfect for extending existing coding agents like Claude Code with VS Code-specific capabilities (symbol search, document outlines) without duplicating tools they already have. Note that this extension uses the streamable HTTP API, not the SSE API.
+A VS Code extension that exposes your IDE as an MCP server, allowing Claude and other AI assistants to control VS Code directly. **This fork adds async task execution** - run long-running commands without blocking your conversation.
 
-This extension can allow for execution of shell commands. This means that there is a potential security risk, so use with caution, and ensure that you trust the MCP client that you are using and that the port is not exposed to anything. Authentication would help, but as the MCP authentication spec is still in flux, this has not been implemented for now.
+## The Problem This Solves
 
-PRs are welcome!
+When using Claude Desktop with VS Code MCP tools, long-running commands (builds, tests, installs) timeout after 10 seconds, blocking your conversation until they complete.
 
-## Demo Video
-https://github.com/user-attachments/assets/20b87dfb-fc39-4710-a910-b9481dde1e90
+**This fork adds async task execution:**
+- Start a command → get a job ID immediately → keep chatting
+- Check status whenever you want
+- No more blocked conversations waiting for builds
+
+## New Async Tools
+
+| Tool | Description |
+|------|-------------|
+| `run_task_async` | Starts a command in background, returns job ID immediately |
+| `get_task_status` | Check status/output of a running or completed task |
+| `list_tasks` | Show all tasks (running, completed, failed) |
+| `cancel_task` | Cancel a running task |
+
+### Example Workflow
+
+```
+You: Run npm install and npm run build
+
+Claude: [calls run_task_async with "npm install && npm run build"]
+        Started task abc123. I'll check on it in a moment.
+        
+        In the meantime, what else would you like to work on?
+
+You: Let's review the README while that runs
+
+Claude: [reads README, discusses it with you]
+        
+        Let me check on that build...
+        [calls get_task_status with "abc123"]
+        
+        Build completed successfully! Here's the output...
+```
 
 ## Installation
 
-1. Install the extension from the [Marketplace](https://marketplace.visualstudio.com/items?itemName=JuehangQin.vscode-mcp-server) or clone this repository and run `npm install` and `npm run compile` to build it.
+### Option 1: Build from source (recommended for now)
 
-## Claude Desktop Configuration
-
-Claude Desktop can be configured to use this extension as an MCP server. To do this, your `claude_desktop_config.json` file should look like this:
+```bash
+git clone https://github.com/ascottbell/vscode-mcp-server
+cd vscode-mcp-server
+npm install
+npm run compile
 ```
+
+Then in VS Code: Extensions → "..." menu → "Install from VSIX" → select the built `.vsix` file
+
+Or press F5 in VS Code to run in development mode.
+
+### Option 2: Use with Claude Desktop
+
+Add to your `claude_desktop_config.json`:
+
+```json
 {
   "mcpServers": {
-    "vscode-mcp-server": {
-        "command": "npx",
-        "args": ["mcp-remote@next", "http://localhost:3000/mcp"]
+    "vscode": {
+      "command": "npx",
+      "args": ["mcp-remote@next", "http://localhost:3000/mcp"]
     }
-
   }
 }
 ```
 
-I also like to use this extension in a Claude project, as it allows me to specify additional instructions for Claude. I find the following prompt to work well:
-```
-You are working on an existing codebase, which you can access using your tools. These code tools interact with a VS Code workspace.
+Then enable the MCP server in VS Code (click status bar item).
 
-WORKFLOW ESSENTIALS:
-1. Always start exploration with list_files_code on root directory (.) first
-2. CRITICAL: Run get_diagnostics_code after EVERY set of code changes before completing tasks
-3. For small edits (≤10 lines): use replace_lines_code with exact original content
-4. For large changes, new files, or uncertain content: use create_file_code with overwrite=true
-
-EXPLORATION STRATEGY:
-- Start: list_files_code with path='.' (never recursive on root)
-- Understand structure: read key files like package.json, README, main entry points
-- Find symbols: use search_symbols_code for functions/classes, get_document_symbols_code for file overviews
-- Before editing: read_file_code the target file to understand current content
-
-EDITING BEST PRACTICES:
-- Small modifications: replace_lines_code (requires exact original content match)
-- If replace_lines_code fails: read_file_code the target lines, then retry with correct content
-- Large changes: create_file_code with overwrite=true is more reliable
-- After any changes: get_diagnostics_code to check for errors
-
-PLANNING REQUIREMENTS:
-Before making code modifications, present a comprehensive plan including:
-- Confidence level (1-10) and reasoning
-- Specific tools you'll use and why
-- Files you'll modify and approach (small edits vs complete rewrites)
-- How you'll verify the changes work (diagnostics, testing, etc.)
-
-ERROR HANDLING:
-- Let errors happen naturally - don't add unnecessary try/catch blocks
-- For tool failures: follow the specific recovery guidance in each tool's description
-- If uncertain about file content: use read_file_code to verify before making changes
-
-APPROVAL PROCESS:
-IMPORTANT: Only run code modification tools after presenting a plan and receiving explicit approval. Each change requires separate approval.
-
-Do not add tests unless specifically requested. If you believe testing is important, explain why and let the user decide.
-```
-
-For context efficiency when exploring codebases, consider adding this to your CLAUDE.md:
-```
-## VS Code Symbol Tools for Context Efficiency
-Use VS Code symbol tools to reduce context consumption:
-- `get_document_symbols_code` for file structure overview instead of reading entire files
-- `search_symbols_code` to find symbols by name across the project
-- `get_symbol_definition_code` for type info and docs without full file context
-- Workflow: get outline → search symbols → get definitions → read implementation only when needed
-```
-
-
-
-This extension serves as a Model Context Protocol (MCP) server, exposing VS Code's filesystem and editing capabilities to MCP clients.
-
-## Features
-
-The VS Code MCP Server extension implements an MCP-compliant server that allows AI models and other MCP clients to:
-
-- **List files and directories** in your VS Code workspace
-- **Read file contents** with encoding support and size limits
-- **Search for symbols** across your workspace
-- **Get symbol definitions** and hover information by line and symbol name
-- **Create new files** using VS Code's WorkspaceEdit API
-- **Make line replacements** in files
-- **Check for diagnostics** (errors and warnings) in your workspace
-- **Execute shell commands** in the integrated terminal with shell integration
-- **Toggle the server** on and off via a status bar item
-
-This extension enables AI assistants and other tools to interact with your VS Code workspace through the standardized MCP protocol.
-
-## How It Works
-
-The extension creates an MCP server that:
-
-1. Runs locally on a configurable port (when enabled)
-2. Handles MCP protocol requests via HTTP
-3. Exposes VS Code's functionality as MCP tools
-4. Provides a status bar indicator showing server status, which can be clicked to toggle the server on/off
-
-## Supported MCP Tools
+## All Available Tools
 
 ### File Tools
-- **list_files_code**: Lists files and directories in your workspace
-  - Parameters:
-    - `path`: The path to list files from
-    - `recursive` (optional): Whether to list files recursively
+- `list_files_code` - List files and directories
+- `read_file_code` - Read file contents
 
-- **read_file_code**: Reads file contents
-  - Parameters:
-    - `path`: The path to the file to read
-    - `encoding` (optional): File encoding (default: utf-8)
-    - `maxCharacters` (optional): Maximum character count (default: 100,000)
-
-### Edit Tools
-- **create_file_code**: Creates a new file using VS Code's WorkspaceEdit API
-  - Parameters:
-    - `path`: The path to the file to create
-    - `content`: The content to write to the file
-    - `overwrite` (optional): Whether to overwrite if the file exists (default: false)
-    - `ignoreIfExists` (optional): Whether to ignore if the file exists (default: false)
-
-- **replace_lines_code**: Replaces specific lines in a file
-  - Parameters:
-    - `path`: The path to the file to modify
-    - `startLine`: The start line number (1-based, inclusive)
-    - `endLine`: The end line number (1-based, inclusive)
-    - `content`: The new content to replace the lines with
-    - `originalCode`: The original code for validation
-
-### Diagnostics Tools
-- **get_diagnostics_code**: Checks for warnings and errors in your workspace
-  - Parameters:
-    - `path` (optional): File path to check (if not provided, checks the entire workspace)
-    - `severities` (optional): Array of severity levels to include (0=Error, 1=Warning, 2=Information, 3=Hint). Default: [0, 1]
-    - `format` (optional): Output format ('text' or 'json'). Default: 'text'
-    - `includeSource` (optional): Whether to include the diagnostic source. Default: true
-
-  This tool is particularly useful for:
-  - Code quality checks before committing changes
-  - Verifying fixes resolved all reported issues
-  - Identifying problems in specific files or the entire workspace
-
-### Symbol Tools
-- **search_symbols_code**: Searches for symbols across the workspace
-  - Parameters:
-    - `query`: The search query for symbol names
-    - `maxResults` (optional): Maximum number of results to return (default: 10)
-  
-  This tool is useful for:
-  - Finding definitions of symbols (functions, classes, variables, etc.) across the codebase
-  - Exploring project structure and organization
-  - Locating specific elements by name
-
-- **get_symbol_definition_code**: Gets definition information for a symbol in a file
-  - Parameters:
-    - `path`: The path to the file containing the symbol
-    - `line`: The line number of the symbol
-    - `symbol`: The symbol name to look for on the specified line
-  
-  This tool provides:
-  - Type information, documentation, and source details for symbols
-  - Code context showing the line where the symbol appears
-  - Symbol range information
-  
-  It's particularly useful for:
-  - Understanding what a symbol represents without navigating away
-  - Checking function signatures, type definitions, or documentation
-  - Quick reference for APIs or library functions
-
-- **get_document_symbols_code**: Gets an outline of all symbols in a file, showing the hierarchical structure
-  - Parameters:
-    - `path`: The path to the file to analyze (relative to workspace)
-    - `maxDepth` (optional): Maximum nesting depth to display
-  
-  This tool provides:
-  - Complete symbol tree for a document (similar to VS Code's Outline view)
-  - Hierarchical structure showing classes, functions, methods, variables, etc.
-  - Position information and symbol kinds for each symbol
-  - Summary statistics by symbol type
-  
-  It's particularly useful for:
-  - Understanding file structure and organization at a glance
-  - Getting an overview of all symbols in a document
-  - Analyzing code architecture and relationships
-  - Finding all symbols of specific types within a file
+### Edit Tools  
+- `create_file_code` - Create new files
+- `replace_lines_code` - Edit specific lines in files
 
 ### Shell Tools
-- **execute_shell_command_code**: Executes a shell command in the VS Code integrated terminal with shell integration
-  - Parameters:
-    - `command`: The shell command to execute
-    - `cwd` (optional): Optional working directory for the command (default: '.')
+- `execute_shell_command_code` - Run commands (sync, 10s timeout)
 
-  This tool is useful for:
-  - Running CLI commands and build operations
-  - Executing git commands
-  - Performing any shell operations that require terminal access
-  - Getting command output for analysis and further processing
+### Async Task Tools (NEW)
+- `run_task_async` - Start command in background
+- `get_task_status` - Check task status/output
+- `list_tasks` - List all tasks
+- `cancel_task` - Cancel running task
 
-## Caveats/TODO
+### Diagnostics Tools
+- `get_diagnostics_code` - Get errors/warnings from VS Code
 
-Currently, only one workspace is supported. The extension also only works locally, to avoid exposing your VS Code instance to any network you may be connected to.
+### Symbol Tools
+- `search_symbols_code` - Search for symbols across workspace
+- `get_symbol_definition_code` - Get symbol definition info
+- `get_document_symbols_code` - Get file outline/structure
 
-## Extension Settings
+## Configuration
 
-* `vscode-mcp-server.port`: The port number for the MCP server (default: 3000)
-* `vscode-mcp-server.host`: Host address for the MCP server (default: 127.0.0.1)
-* `vscode-mcp-server.defaultEnabled`: Whether the MCP server should be enabled by default on VS Code startup
-* `vscode-mcp-server.enabledTools`: Configure which tool categories are enabled (file, edit, shell, diagnostics, symbol)
+In VS Code settings, you can enable/disable specific tool categories:
 
-**Selective Tool Configuration**: Useful for coding agents that already have certain capabilities. For example, with Claude Code you might disable file/edit tools and only enable symbol tools to add VS Code-specific symbol searching without tool duplication.
-
-## Using with MCP Clients
-
-To connect MCP clients to this server, configure them to use:
-```
-http://localhost:3000/mcp
-```
-
-Or if you've configured a custom host:
-```
-http://[your-host]:3000/mcp
+```json
+{
+  "vscode-mcp-server.enabledTools": {
+    "file": true,
+    "edit": true,
+    "shell": true,
+    "asyncTask": true,
+    "diagnostics": true,
+    "symbol": true
+  }
+}
 ```
 
-Remember that you need to enable the server first by clicking on the status bar item!
+## Why This Fork?
 
-## Contributing
+The original [juehang/vscode-mcp-server](https://github.com/juehang/vscode-mcp-server) is excellent but lacks async execution. This fork adds the ability to run long-running tasks without blocking, which is essential for real development workflows.
 
-Contributions are welcome! Feel free to submit issues or pull requests.
+The goal: **Your AI is the center, the IDE is just a surface.**
 
 ## License
 
-[MIT](LICENSE)
+MIT - Same as the original project.
+
+## Credits
+
+Based on [juehang/vscode-mcp-server](https://github.com/juehang/vscode-mcp-server) by Juehang Qin.
