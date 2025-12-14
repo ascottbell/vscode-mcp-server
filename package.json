@@ -1,11 +1,11 @@
 {
-  "name": "vscode-mcp-server",
+  "name": "vscode-mcp-server-async",
   "icon": "media/logo.png",
-  "displayName": "vscode-mcp-server",
-  "description": "VS Code as a MCP server",
-  "version": "0.3.1",
-  "repository": "https://github.com/juehang/vscode-mcp-server",
-  "publisher": "JuehangQin",
+  "displayName": "VS Code MCP Server (Async)",
+  "description": "VS Code as a MCP server with async task support - run long commands without blocking",
+  "version": "0.4.0",
+  "repository": "https://github.com/ascottbell/vscode-mcp-server",
+  "publisher": "ascottbell",
   "license": "MIT",
   "engines": {
     "vscode": "^1.99.0"
@@ -44,6 +44,7 @@
             "file": true,
             "edit": true,
             "shell": true,
+            "asyncTask": true,
             "diagnostics": true,
             "symbol": true
           },
@@ -58,7 +59,11 @@
             },
             "shell": {
               "type": "boolean",
-              "description": "Enable shell command execution tools"
+              "description": "Enable shell command execution tools (sync, with timeout)"
+            },
+            "asyncTask": {
+              "type": "boolean",
+              "description": "Enable async task execution tools (run_task_async, get_task_status, list_tasks, cancel_task)"
             },
             "diagnostics": {
               "type": "boolean",
