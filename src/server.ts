@@ -7,6 +7,7 @@ import { Request, Response } from 'express';
 import { registerFileTools, FileListingCallback } from './tools/file-tools';
 import { registerEditTools } from './tools/edit-tools';
 import { registerShellTools } from './tools/shell-tools';
+import { registerAsyncTaskTools } from './tools/async-task-tools';
 import { registerDiagnosticsTools } from './tools/diagnostics-tools';
 import { registerSymbolTools } from './tools/symbol-tools';
 import { logger } from './utils/logger';
@@ -15,6 +16,7 @@ export interface ToolConfiguration {
     file: boolean;
     edit: boolean;
     shell: boolean;
+    asyncTask: boolean;
     diagnostics: boolean;
     symbol: boolean;
 }
@@ -42,6 +44,7 @@ export class MCPServer {
             file: true,
             edit: true,
             shell: true,
+            asyncTask: true,
             diagnostics: true,
             symbol: true
         };
@@ -98,6 +101,14 @@ export class MCPServer {
                 logger.info('MCP shell tools registered successfully');
             } else {
                 logger.info('MCP shell tools disabled by configuration');
+            }
+            
+            // Register async task tools if enabled
+            if (this.toolConfig.asyncTask) {
+                registerAsyncTaskTools(this.server, () => this.terminal);
+                logger.info('MCP async task tools registered successfully');
+            } else {
+                logger.info('MCP async task tools disabled by configuration');
             }
             
             // Register diagnostics tools if enabled
