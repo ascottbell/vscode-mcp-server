@@ -27,6 +27,7 @@ function getToolConfiguration(): ToolConfiguration {
         file: enabledTools.file ?? true,
         edit: enabledTools.edit ?? true,
         shell: enabledTools.shell ?? true,
+        asyncTask: enabledTools.asyncTask ?? true,
         diagnostics: enabledTools.diagnostics ?? true,
         symbol: enabledTools.symbol ?? true
     };
